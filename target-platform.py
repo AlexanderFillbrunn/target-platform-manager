@@ -16,6 +16,7 @@ password = None
 remoteDirectory = None
 localDirectory = None
 files = None
+ignored_files = set(['.exe','.zip','.gz','.md5','.dmg'])
 
 def get_arguments():
     parser = argparse.ArgumentParser(description='Mirror target platform')
@@ -30,10 +31,10 @@ def load_config():
         urls[i] = urls[i].replace('\n', '')
         if not urls[i].endswith('/'):
             urls[i] = urls[i] + '/'
-    with open(hiddenDir + 'password', 'r') as file:
-        data = file.readlines()[0]
-    user = data[0]
-    password = data[1]
+    with open(hiddenDir + 'account', 'r') as file:
+        user, password = file.readlines()
+    user = user.replace('\n', '')
+    password = password.replace('\n', '')
 
 def main():
     option = get_arguments().option
@@ -108,18 +109,17 @@ def downloadFiles():
 def downloadFile(url, folder):
     if not os.path.exists(folder):
         os.makedirs(folder)
-    try:
-        file = urllib2.urlopen(url)
-        with open(folder + os.path.basename(url), 'wb') as local_file:
-            local_file.write(file.read())
-    except urllib2.HTTPError, e:
-        print(e)
-    except urllib2.URLError, e:
-        print(e)
+    request = urllib2.Request(url)
+    base64string = base64.b64encode('%s:%s' % (user, password))
+    request.add_header("Authorization", "Basic %s" % base64string)
+    file = urllib2.urlopen(request)
+    with open(folder + os.path.basename(url), 'wb') as local_file:
+        local_file.write(file.read())
 
 def addFile(file):
     global files
-    if not file.endswith('.zip'):
+    extension = os.path.splitext(file)[1]
+    if not extension in ignored_files:
         files.append(file)
 
 def getHtml(url):
