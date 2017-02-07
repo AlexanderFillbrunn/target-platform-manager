@@ -63,7 +63,6 @@ def restore():
     if os.path.exists(backupDir):
         shutil.rmtree(currentDir)
         shutil.move(backupDir, currentDir)
-        shutil.rmtree(backupDir)
         print('Restored backup')
     else:
         print('No backup available')
