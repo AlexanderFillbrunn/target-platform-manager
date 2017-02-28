@@ -12,21 +12,21 @@ Contains the username (line 1) and password (line 2) used for basic auth.
 
 `~/target-platform/urls`
 
-Contains the URLs (one per line) to the target platform sites.
+Contains the names and URLs (format: 'name : url') to the target platform sites (one per line).
 
 ### Commands
 
-`python target-platform.py update`
+`python target-platform.py update tp1`
 
-Downloads a new copy of the target platform under the configured URLs. The current target platform is saved as a backup (if a backup is not already present).
+Downloads a new copy of the target platform tp1 under the configured URL. The current target platform is saved as a backup (if a backup is not already present).
 
-`python target-platform.py restore`
+`python target-platform.py restore tp1`
 
-Restores a previous target platform, deleting the current one.
+Restores the previous target platform for tp1, deleting the current one.
 
-`python target-platform.py clean`
+`python target-platform.py clean tp1`
 
-Deletes the previous backup.
+Deletes the previous backup for tp1.
 
 ### Eclipse Configuration
 

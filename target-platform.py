@@ -9,7 +9,8 @@ home = os.path.expanduser('~')
 hiddenDir = home + '/.target-platform/'
 current_dir = hiddenDir + 'current/'
 backup_dir = hiddenDir + 'backup/'
-urls = []
+tp_name = None
+url = None
 user = None
 password = None
 remote_directory = None
@@ -20,19 +21,28 @@ ignored_files = {'.exe', '.zip', '.gz', '.md5', '.dmg'}
 
 def get_arguments():
     parser = argparse.ArgumentParser(description='Mirror target platform')
-    parser.add_argument('option', type=str, help='update: update the current target platform. restore: restore the '
-                                                 'previous target platform. clean: remove restore point')
+    parser.add_argument('operation', type=str, help='update: update the current target platform. restore: restore the '
+                                                 'previous target platform. clean: remove restore point.')
+    parser.add_argument('targetplatform', type=str, help='The target platform to use.')
     return parser.parse_args()
 
 
-def load_config():
-    global urls, password, user
+def load_config(targetplatform):
+    global tp_name, url, password, user
+    lines = []
     with open(hiddenDir + 'urls', 'r') as file:
-        urls = file.readlines()
-    for i in range(len(urls)):
-        urls[i] = urls[i].replace('\n', '')
-        if not urls[i].endswith('/'):
-            urls[i] += '/'
+        lines = file.readlines()
+    for i in range(len(lines)):
+        split = lines[i].split(' : ')
+        if len(split) != 2:
+            continue
+        tp_name, url = split
+        tp_name = tp_name.strip()
+        url = url.strip()
+        if tp_name == targetplatform:
+            break
+    if not url.endswith('/'):
+        url += '/'
     with open(hiddenDir + 'account', 'r') as file:
         user, password = file.readlines()
     user = user.replace('\n', '')
@@ -40,59 +50,61 @@ def load_config():
 
 
 def main():
-    option = get_arguments().option
-    load_config()
-    if option == 'update':
+    arguments = get_arguments()
+    operation = arguments.operation
+    targetplatform = arguments.targetplatform
+    load_config(targetplatform)
+    if targetplatform != tp_name:
+        print('The target platform ' + targetplatform + ' could not be found in the config file ' + hiddenDir + 'urls')
+    elif operation == 'update':
         backup()
         try:
-            update_from_urls()
+            update()
         except Exception as e:
             print('Error occured: ' + str(e))
             restore()
-    elif option == 'restore':
+    elif operation == 'restore':
         restore()
-    elif option == 'clean':
+    elif operation == 'clean':
         clean()
     else:
-        print('Unknown option: ' + option)
+        print('Unknown operation: ' + operation)
 
 
 def backup():
-    if os.path.exists(backup_dir):
-        if os.path.exists(current_dir):
-            shutil.rmtree(current_dir)
-    elif os.path.exists(current_dir):
-        shutil.move(current_dir, backup_dir)
+    if os.path.exists(backup_dir + tp_name):
+        if os.path.exists(current_dir + tp_name):
+            shutil.rmtree(current_dir + tp_name)
+    elif os.path.exists(current_dir + tp_name):
+        shutil.move(current_dir + tp_name, backup_dir + tp_name)
 
 
 def restore():
-    if os.path.exists(backup_dir):
-        if os.path.exists(current_dir):
-            shutil.rmtree(current_dir)
-        shutil.move(backup_dir, current_dir)
-        print('Restored backup')
+    if os.path.exists(backup_dir + tp_name):
+        if os.path.exists(current_dir + tp_name):
+            shutil.rmtree(current_dir + tp_name)
+        shutil.move(backup_dir + tp_name, current_dir + tp_name)
+        print('Restored backup for ' + tp_name)
     else:
-        print('No backup available')
+        print('No backup available for ' + tp_name)
 
 
 def clean():
     if os.path.exists(backup_dir):
         shutil.rmtree(backup_dir)
-        print('Backup removed')
+        print('Backup for ' + tp_name + ' removed')
     else:
-        print('No backup available')
+        print('No backup for ' + tp_name + ' available')
 
 
-def update_from_urls():
+def update():
     global remote_directory, local_directory, files
-    for url in urls:
-        files = []
-        remote_directory = url
-        local_directory = current_dir + os.path.basename(url[:len(url) - 1]) + '/'
-        parse_folder(url)
-        print('Downloading ' + url)
-        download_files()
-    print()
+    files = []
+    remote_directory = url
+    local_directory = current_dir + tp_name + '/'
+    parse_folder(url)
+    print('Downloading ' + tp_name + ' from ' + url)
+    download_files()
 
 
 def parse_folder(url):
