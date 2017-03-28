@@ -3,9 +3,11 @@ Python script that manages a local mirror of a target platform.
 
 
 ## Prerequisites
-The script currently only runs in Python 3. The following packages are needed:
-progressbar2 (>=3.0)
-requests
+The script currently only runs in Python 3.
+
+The following packages are needed:
+- progressbar2 (>=3.0)
+- requests
 
 It has been tested using Anaconda 3.
 
