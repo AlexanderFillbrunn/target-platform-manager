@@ -2,6 +2,13 @@
 Python script that manages a local mirror of a target platform.
 
 
+## Prerequisites
+The script currently only runs in Python 3. The following packages are needed:
+progressbar2 (>=3.0)
+requests
+
+It has been tested using Anaconda 3.
+
 ## How to Use
 
 ### Configuration Files
@@ -18,7 +25,7 @@ Contains the names and URLs (format: 'name : url') to the target platform sites 
 
 `python target-platform.py update tp1`
 
-Downloads a new copy of the target platform tp1 under the configured URL. The current target platform is saved as a backup (if a backup is not already present).
+Downloads a new copy of the target platform with the name tp1 under the configured URL. The current target platform is saved as a backup (if a backup is not already present).
 
 `python target-platform.py restore tp1`
 
