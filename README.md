@@ -15,13 +15,13 @@ It has been tested using Anaconda 3.
 
 ### Configuration Files
 
-`~/.target-platform/account`
-
-Contains the username (line 1) and password (line 2) used for basic auth.
-
 `~/target-platform/urls`
 
 Contains the names and URLs (format: 'name : url') to the target platform sites (one per line).
+
+`~/.target-platform/account` (optional)
+
+Contains the username (line 1) and password (line 2) used for basic auth. This file should only be present if basic auth is needed.
 
 ### Commands
 

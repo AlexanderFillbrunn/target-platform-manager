@@ -43,10 +43,11 @@ def load_config(targetplatform):
             break
     if not url.endswith('/'):
         url += '/'
-    with open(hiddenDir + 'account', 'r') as file:
-        user, password = file.readlines()
-    user = user.replace('\n', '')
-    password = password.replace('\n', '')
+    if os.path.isfile(hiddenDir + 'account'):
+        with open(hiddenDir + 'account', 'r') as file:
+            user, password = file.readlines()
+        user = user.replace('\n', '')
+        password = password.replace('\n', '')
 
 
 def main():
@@ -130,7 +131,9 @@ def download_files():
 def download_file(url, folder):
     if not os.path.exists(folder):
         os.makedirs(folder)
-    auth = requests.auth.HTTPBasicAuth(user, password)
+    auth = None
+    if user is not None and password is not None:
+        auth = requests.auth.HTTPBasicAuth(user, password)
     response = requests.get(url, auth=auth)
     with open(folder + os.path.basename(url), 'wb') as local_file:
         local_file.write(response.content)
