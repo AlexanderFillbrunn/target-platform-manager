@@ -15,7 +15,7 @@ It has been tested using Anaconda 3.
 
 ### Configuration Files
 
-`~/target-platform/urls`
+`~/.target-platform/urls`
 
 Contains the names and URLs (format: 'name : url') to the target platform sites (one per line).
 
