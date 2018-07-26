@@ -10,6 +10,9 @@ import math
 import signal
 import traceback
 import sys
+import zipfile
+from xml.etree import ElementTree
+import tempfile
 
 
 home = os.path.expanduser('~')
@@ -29,14 +32,13 @@ ignored_files = {'.exe', '.zip', '.gz', '.md5', '.dmg'}
 def get_arguments():
     parser = argparse.ArgumentParser(description='Mirror target platform')
     parser.add_argument('operation', type=str, help='update: update the current target platform. restore: restore the '
-                                                 'previous target platform. clean: remove restore point.')
+                                                    'previous target platform. clean: remove restore point.')
     parser.add_argument('targetplatform', type=str, help='The target platform to use.')
     return parser.parse_args()
 
 
 def load_config(targetplatform):
     global tp_name, url, password, user
-    lines = []
     with open(hiddenDir + 'urls', 'r') as file:
         lines = file.readlines()
     for i in range(len(lines)):
@@ -117,14 +119,80 @@ def update():
     download_files()
 
 
-def parse_folder(url):
+def parse_folder_html(url):
     html = get_html(url)
     folders, file_names = parse_html(html)
     for folder in folders:
         parse_folder(url + folder)
-        pass
     for file in file_names:
         add_file(url + file)
+
+
+def parse_folder(url):
+    tmp_folder = get_temporary_file_path('target-platform-manager') + os.sep
+    composite_content = 'compositeContent.jar'
+    composite_artifacts = 'compositeArtifacts.jar'
+    content = 'content.jar'
+    artifacts = 'artifacts.jar'
+    if download_file(url + composite_content, tmp_folder, raise_exception=False):
+        add_file(url + composite_content)
+        add_file(url + composite_artifacts)
+        folders = parse_composite_content(tmp_folder + composite_content)
+        for folder in folders:
+            parse_folder(url + folder)
+    elif download_file(url + content, tmp_folder, raise_exception=False):
+        add_file(url + content)
+        add_file(url + artifacts)
+        file_list = parse_content(tmp_folder + content)
+        for file in file_list:
+            add_file(url + file)
+    shutil.rmtree(tmp_folder)
+
+
+def parse_composite_content(path):
+    folders = list()
+    xml = read_zipped_file(path, 'compositeContent.xml')
+    root = ElementTree.fromstring(xml)
+    children = root.findall('./children/child')
+    for child in children:
+        folder = child.get('location')
+        if not folder.endswith('/'):
+            folder += '/'
+        folders.append(folder)
+    return folders
+
+
+def parse_content(path):
+    file_set = set()
+    xml = read_zipped_file(path, 'content.xml')
+    root = ElementTree.fromstring(xml)
+    artifacts = root.findall('./units/unit/artifacts/artifact')
+    for artifact in artifacts:
+        file_name = artifact.get('id') + '_' + artifact.get('version')
+        classifier = artifact.get('classifier')
+        if classifier == 'osgi.bundle':
+            folder_name = 'plugins'
+            file_name += '.jar'
+        elif classifier == 'org.eclipse.update.feature':
+            folder_name = 'features'
+            file_name += '.jar'
+        elif classifier == 'binary':
+            folder_name = 'binary'
+        else:
+            raise ValueError('Unknown artifact classifier in content.xml: ' + classifier)
+        file_set.add(folder_name + '/' + file_name)
+    return file_set
+
+
+def read_zipped_file(zip_path, file_path):
+    with zipfile.ZipFile(zip_path, 'r') as zip_file:
+        return zip_file.read(file_path)
+
+
+def get_temporary_file_path(prefix=None):
+    file_path = tempfile.mkstemp(prefix=prefix)[1]
+    os.remove(file_path)
+    return file_path
 
 
 def download_files():
@@ -164,23 +232,28 @@ def download_file_batch(file_batch, queue):
         queue.put(e)
 
 
-def download_file(url, folder):
+def download_file(url, folder, raise_exception=True):
     os.makedirs(folder, exist_ok=True)
     auth = None
     if user is not None and password is not None:
         auth = requests.auth.HTTPBasicAuth(user, password)
     response = requests.get(url, auth=auth)
+    if response.status_code != 200:
+        if raise_exception:
+            raise IOError(str(response.status_code) + ': Could not download \'' + url + '\': ')
+        return False
     with open(folder + os.path.basename(url), 'wb') as local_file:
         local_file.write(response.content)
+        return True
 
 
-def handle_sigint(signal, frame):
+def handle_sigint(signal_, frame):
     print('\nProcess aborted', file=sys.stderr)
     restore()
     sys.exit(0)
 
 
-def handle_sigint_worker(signal, frame):
+def handle_sigint_worker(signal_, frame):
     sys.exit(0)
 
 
