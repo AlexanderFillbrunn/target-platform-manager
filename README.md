@@ -9,7 +9,7 @@ The following packages are needed:
 - progressbar2 (>=3.0)
 - requests
 
-It has been tested using Anaconda 3.
+It has been tested using Anaconda 5.2.
 
 ## How to Use
 
