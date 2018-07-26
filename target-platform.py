@@ -4,6 +4,13 @@ import os
 import shutil
 from progressbar import ProgressBar
 import requests
+from multiprocessing import pool
+import multiprocessing
+import math
+import signal
+import traceback
+import sys
+
 
 home = os.path.expanduser('~')
 hiddenDir = home + '/.target-platform/'
@@ -51,6 +58,7 @@ def load_config(targetplatform):
 
 
 def main():
+    signal.signal(signal.SIGINT, handle_sigint)
     arguments = get_arguments()
     operation = arguments.operation
     targetplatform = arguments.targetplatform
@@ -62,7 +70,8 @@ def main():
         try:
             update()
         except Exception as e:
-            print('Error occured: ' + str(e))
+            print('Error occured: ' + str(e), file=sys.stderr)
+            traceback.print_exc()
             restore()
     elif operation == 'restore':
         restore()
@@ -120,23 +129,59 @@ def parse_folder(url):
 
 def download_files():
     global files
-    with ProgressBar(max_value=len(files)) as progress:
-        for i, file in enumerate(files):
+    number_processes = os.cpu_count()
+    signal.signal(signal.SIGINT, handle_sigint_worker)
+    with pool.Pool(number_processes) as process_pool:
+        with ProgressBar(max_value=len(files)) as progress:
+            progress.update(0)
+            chunks = chunk(len(files), number_processes)
+            queue = multiprocessing.Manager().Queue()
+            for file_chunk in chunks:
+                process_pool.apply_async(download_file_batch, [files[file_chunk['start']:file_chunk['end']], queue])
+            signal.signal(signal.SIGINT, handle_sigint)
+            workers_done = 0
+            done = 0
+            while workers_done < number_processes:
+                result = queue.get()
+                if result is True:
+                    workers_done += 1
+                elif isinstance(result, int):
+                    done += result
+                    progress.update(done)
+                else:
+                    raise result
+
+
+def download_file_batch(file_batch, queue):
+    try:
+        for file in file_batch:
             local_path = file.replace(remote_directory, local_directory)
             folder = os.path.dirname(local_path) + '/'
             download_file(file, folder)
-            progress.update(i + 1)
+            queue.put(1)
+        queue.put(True)
+    except Exception as e:
+        queue.put(e)
 
 
 def download_file(url, folder):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
     auth = None
     if user is not None and password is not None:
         auth = requests.auth.HTTPBasicAuth(user, password)
     response = requests.get(url, auth=auth)
     with open(folder + os.path.basename(url), 'wb') as local_file:
         local_file.write(response.content)
+
+
+def handle_sigint(signal, frame):
+    print('\nProcess aborted', file=sys.stderr)
+    restore()
+    sys.exit(0)
+
+
+def handle_sigint_worker(signal, frame):
+    sys.exit(0)
 
 
 def add_file(file):
@@ -189,6 +234,18 @@ def parse_html(html):
     parser.reset()
     parser.feed(html)
     return parser.folders, parser.files
+
+
+def chunk(number, number_chunks):
+    chunks = []
+    chunk_size = math.ceil(number / number_chunks)
+    number_chunks = math.ceil(number / chunk_size)
+    for i in range(number_chunks):
+        start = chunk_size * i
+        end = min(start + chunk_size, number)
+        size = end - start
+        chunks.append({'size': size, 'start': start, 'end': end})
+    return chunks
 
 
 if __name__ == '__main__':
