@@ -90,9 +90,9 @@ def backup():
 
 
 def restore():
+    if os.path.exists(current_dir + tp_name):
+        shutil.rmtree(current_dir + tp_name)
     if os.path.exists(backup_dir + tp_name):
-        if os.path.exists(current_dir + tp_name):
-            shutil.rmtree(current_dir + tp_name)
         shutil.move(backup_dir + tp_name, current_dir + tp_name)
         print('Restored backup for ' + tp_name)
     else:
@@ -100,8 +100,8 @@ def restore():
 
 
 def clean():
-    if os.path.exists(backup_dir):
-        shutil.rmtree(backup_dir)
+    if os.path.exists(backup_dir + tp_name):
+        shutil.rmtree(backup_dir + tp_name)
         print('Backup for ' + tp_name + ' removed')
     else:
         print('No backup for ' + tp_name + ' available')
