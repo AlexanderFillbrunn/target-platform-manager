@@ -1,18 +1,18 @@
 import argparse
+import math
+import multiprocessing
 import os
 import shutil
-from progressbar import ProgressBar
-import requests
-from multiprocessing import pool
-import multiprocessing
-import math
 import signal
-import traceback
 import sys
-import zipfile
-from xml.etree import ElementTree
 import tempfile
+import traceback
+import zipfile
+from multiprocessing import pool
+from xml.etree import ElementTree
 
+import requests
+from progressbar import ProgressBar
 
 home = os.path.expanduser('~')
 hiddenDir = home + '/.target-platform/'
@@ -172,17 +172,6 @@ def parse_content(path):
     return file_set
 
 
-def read_zipped_file(zip_path, file_path):
-    with zipfile.ZipFile(zip_path, 'r') as zip_file:
-        return zip_file.read(file_path)
-
-
-def get_temporary_file_path(prefix=None):
-    file_path = tempfile.mkstemp(prefix=prefix)[1]
-    os.remove(file_path)
-    return file_path
-
-
 def download_files():
     file_list = list(files)
     number_processes = os.cpu_count()
@@ -235,14 +224,15 @@ def download_file(url, folder, raise_exception=True):
         return True
 
 
-def handle_sigint(signal_, frame):
-    print('\nProcess aborted', file=sys.stderr)
-    restore()
-    sys.exit(0)
+def read_zipped_file(zip_path, file_path):
+    with zipfile.ZipFile(zip_path, 'r') as zip_file:
+        return zip_file.read(file_path)
 
 
-def handle_sigint_worker(signal_, frame):
-    sys.exit(0)
+def get_temporary_file_path(prefix=None):
+    file_path = tempfile.mkstemp(prefix=prefix)[1]
+    os.remove(file_path)
+    return file_path
 
 
 def chunk(number, number_chunks):
@@ -255,6 +245,16 @@ def chunk(number, number_chunks):
         size = end - start
         chunks.append({'size': size, 'start': start, 'end': end})
     return chunks
+
+
+def handle_sigint(signal_, frame):
+    print('\nProcess aborted', file=sys.stderr)
+    restore()
+    sys.exit(0)
+
+
+def handle_sigint_worker(signal_, frame):
+    sys.exit(0)
 
 
 if __name__ == '__main__':
