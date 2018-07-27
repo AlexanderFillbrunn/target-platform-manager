@@ -1,5 +1,4 @@
 import argparse
-from html.parser import HTMLParser
 import os
 import shutil
 from progressbar import ProgressBar
@@ -19,39 +18,38 @@ home = os.path.expanduser('~')
 hiddenDir = home + '/.target-platform/'
 current_dir = hiddenDir + 'current/'
 backup_dir = hiddenDir + 'backup/'
-tp_name = None
-url = None
+tp_name = ''
+base_url = ''
 user = None
 password = None
 remote_directory = None
 local_directory = None
-files = None
-ignored_files = {'.exe', '.zip', '.gz', '.md5', '.dmg'}
+files = set()
 
 
 def get_arguments():
     parser = argparse.ArgumentParser(description='Mirror target platform')
     parser.add_argument('operation', type=str, help='update: update the current target platform. restore: restore the '
                                                     'previous target platform. clean: remove restore point.')
-    parser.add_argument('targetplatform', type=str, help='The target platform to use.')
+    parser.add_argument('target_platform', type=str, help='The target platform to use.')
     return parser.parse_args()
 
 
-def load_config(targetplatform):
-    global tp_name, url, password, user
+def load_config(target_platform):
+    global tp_name, base_url, password, user
     with open(hiddenDir + 'urls', 'r') as file:
         lines = file.readlines()
     for i in range(len(lines)):
         split = lines[i].split(' : ')
         if len(split) != 2:
             continue
-        tp_name, url = split
+        tp_name, base_url = split
         tp_name = tp_name.strip()
-        url = url.strip()
-        if tp_name == targetplatform:
+        base_url = base_url.strip()
+        if tp_name == target_platform:
             break
-    if not url.endswith('/'):
-        url += '/'
+    if not base_url.endswith('/'):
+        base_url += '/'
     if os.path.isfile(hiddenDir + 'account'):
         with open(hiddenDir + 'account', 'r') as file:
             user, password = file.readlines()
@@ -63,16 +61,16 @@ def main():
     signal.signal(signal.SIGINT, handle_sigint)
     arguments = get_arguments()
     operation = arguments.operation
-    targetplatform = arguments.targetplatform
-    load_config(targetplatform)
-    if targetplatform != tp_name:
-        print('The target platform ' + targetplatform + ' could not be found in the config file ' + hiddenDir + 'urls')
+    target_platform = arguments.target_platform
+    load_config(target_platform)
+    if target_platform != tp_name:
+        print('The target platform ' + target_platform + ' could not be found in the config file ' + hiddenDir + 'urls')
     elif operation == 'update':
         backup()
         try:
             update()
         except Exception as e:
-            print('Error occured: ' + str(e), file=sys.stderr)
+            print('Error occurred: ' + str(e), file=sys.stderr)
             traceback.print_exc()
             restore()
     elif operation == 'restore':
@@ -110,22 +108,12 @@ def clean():
 
 
 def update():
-    global remote_directory, local_directory, files
-    files = []
-    remote_directory = url
+    global remote_directory, local_directory
+    remote_directory = base_url
     local_directory = current_dir + tp_name + '/'
-    parse_folder(url)
-    print('Downloading ' + tp_name + ' from ' + url)
+    parse_folder(base_url)
+    print('Downloading ' + tp_name + ' from ' + base_url)
     download_files()
-
-
-def parse_folder_html(url):
-    html = get_html(url)
-    folders, file_names = parse_html(html)
-    for folder in folders:
-        parse_folder(url + folder)
-    for file in file_names:
-        add_file(url + file)
 
 
 def parse_folder(url):
@@ -135,17 +123,17 @@ def parse_folder(url):
     content = 'content.jar'
     artifacts = 'artifacts.jar'
     if download_file(url + composite_content, tmp_folder, raise_exception=False):
-        add_file(url + composite_content)
-        add_file(url + composite_artifacts)
+        files.add(url + composite_content)
+        files.add(url + composite_artifacts)
         folders = parse_composite_content(tmp_folder + composite_content)
         for folder in folders:
             parse_folder(url + folder)
     elif download_file(url + content, tmp_folder, raise_exception=False):
-        add_file(url + content)
-        add_file(url + artifacts)
-        file_list = parse_content(tmp_folder + content)
-        for file in file_list:
-            add_file(url + file)
+        files.add(url + content)
+        files.add(url + artifacts)
+        file_set = parse_content(tmp_folder + content)
+        for file in file_set:
+            files.add(url + file)
     shutil.rmtree(tmp_folder)
 
 
@@ -196,16 +184,16 @@ def get_temporary_file_path(prefix=None):
 
 
 def download_files():
-    global files
+    file_list = list(files)
     number_processes = os.cpu_count()
     signal.signal(signal.SIGINT, handle_sigint_worker)
     with pool.Pool(number_processes) as process_pool:
-        with ProgressBar(max_value=len(files)) as progress:
+        with ProgressBar(max_value=len(file_list)) as progress:
             progress.update(0)
-            chunks = chunk(len(files), number_processes)
+            chunks = chunk(len(file_list), number_processes)
             queue = multiprocessing.Manager().Queue()
             for file_chunk in chunks:
-                process_pool.apply_async(download_file_batch, [files[file_chunk['start']:file_chunk['end']], queue])
+                process_pool.apply_async(download_file_batch, [file_list[file_chunk['start']:file_chunk['end']], queue])
             signal.signal(signal.SIGINT, handle_sigint)
             workers_done = 0
             done = 0
@@ -255,58 +243,6 @@ def handle_sigint(signal_, frame):
 
 def handle_sigint_worker(signal_, frame):
     sys.exit(0)
-
-
-def add_file(file):
-    global files
-    extension = os.path.splitext(file)[1]
-    if extension not in ignored_files:
-        files.append(file)
-
-
-def get_html(url):
-    auth = requests.auth.HTTPBasicAuth(user, password)
-    response = requests.get(url, auth=auth)
-    return response.text
-
-
-class FileLinkHTMLParser(HTMLParser):
-
-    def __init__(self):
-        self.folders = set()
-        self.files = set()
-        self.valid = False
-        HTMLParser.__init__(self)
-
-    def handle_starttag(self, tag, attrs):
-        if tag == 'tr':
-            for attr in attrs:
-                if attr[0] == 'class' and (attr[1] == 'odd' or attr[1] == 'even'):
-                    self.valid = True
-        elif tag == 'a' and self.valid:
-            for attr in attrs:
-                if attr[0] == 'href':
-                    if attr[1].startswith('/') or attr[1].startswith('http'):
-                        # this is not a link we care about, ignore
-                        pass
-                    elif attr[1].endswith('/'):
-                        self.folders.add(attr[1])
-                    else:
-                        self.files.add(attr[1])
-
-    def handle_endtag(self, tag):
-        if tag == 'tr':
-            self.valid = False
-
-    def handle_data(self, data):
-        pass
-
-
-def parse_html(html):
-    parser = FileLinkHTMLParser()
-    parser.reset()
-    parser.feed(html)
-    return parser.folders, parser.files
 
 
 def chunk(number, number_chunks):
